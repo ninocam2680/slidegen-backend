@@ -37,8 +37,8 @@ def create_presentation(slides_data):
                 img_data = requests.get(image_url).content
                 image_stream = BytesIO(img_data)
                 slide.shapes.add_picture(image_stream, Inches(5), Inches(2), width=Inches(4))
-            except:
-                pass  # Silenzia errori immagine
+            except Exception as e:
+                print(f"Errore immagine: {e}")
 
     return prs
 
