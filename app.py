@@ -1,6 +1,6 @@
 from flask import Flask, request, send_file, jsonify
 from pptx import Presentation
-from pptx.util import Inches, Pt
+from pptx.util import Inches
 from io import BytesIO
 import requests
 
@@ -21,11 +21,20 @@ def create_presentation(slides_data):
         layout = next((l for l in prs.slide_layouts if l.name == layout_name), prs.slide_layouts[0])
         slide = prs.slides.add_slide(layout)
 
+        # Titolo
         title = slide.shapes.title
-        content_box = slide.placeholders[1] if len(slide.placeholders) > 1 else None
-
         if title:
             title.text = slide_info.get("title", "")
+
+        # Contenuto (cerca un placeholder diverso dal titolo in modo sicuro)
+        content_box = None
+        for placeholder in slide.placeholders:
+            try:
+                if placeholder.placeholder_format.idx != 0:  # 0 è il titolo
+                    content_box = placeholder
+                    break
+            except Exception:
+                continue
 
         if content_box:
             content_box.text = slide_info.get("content", "")
@@ -38,24 +47,30 @@ def create_presentation(slides_data):
                 image_stream = BytesIO(img_data)
                 slide.shapes.add_picture(image_stream, Inches(5), Inches(2), width=Inches(4))
             except Exception as e:
-                print(f"Errore immagine: {e}")
+                print(f"Errore nel caricamento immagine: {e}")
 
     return prs
 
 @app.route("/generate", methods=["POST"])
-
 def generate_pptx():
     data = request.get_json()
     if not data or "slides" not in data:
         return jsonify({"error": "Invalid input"}), 400
 
-    prs = create_presentation(data["slides"])
-    pptx_io = BytesIO()
-    prs.save(pptx_io)
-    pptx_io.seek(0)
+    try:
+        prs = create_presentation(data["slides"])
+        pptx_io = BytesIO()
+        prs.save(pptx_io)
+        pptx_io.seek(0)
 
-    return send_file(pptx_io, mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                     as_attachment=True, download_name="presentazione.pptx")
+        return send_file(
+            pptx_io,
+            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            as_attachment=True,
+            download_name="presentazione.pptx"
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
