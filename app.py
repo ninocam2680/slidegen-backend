@@ -42,7 +42,8 @@ def create_presentation(slides_data):
 
     return prs
 
-@app.route("/generate-pptx", methods=["POST"])
+@app.route("/generate", methods=["POST"])
+
 def generate_pptx():
     data = request.get_json()
     if not data or "slides" not in data:
