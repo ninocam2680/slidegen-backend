@@ -2,9 +2,12 @@ from flask import Flask, request, send_file, jsonify
 from pptx import Presentation
 from pptx.util import Inches
 from io import BytesIO
+from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
+CORS(app, origins=["https://areaprompt.com"])
+
 
 # 🔐 Chiave segreta condivisa con WordPress
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"  # <-- imposta anche in wp_localize_script()
