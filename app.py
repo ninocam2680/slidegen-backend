@@ -50,9 +50,12 @@ def remove_default_slides(prs):
         del prs.slides._sldIdLst[0]
 
 def apply_font_from_template(paragraph, ref_paragraph):
-    paragraph.font.size = ref_paragraph.font.size
-    paragraph.font.bold = ref_paragraph.font.bold
-    paragraph.font.color.rgb = ref_paragraph.font.color.rgb
+    if not ref_paragraph or not ref_paragraph.font:
+        return
+    font = ref_paragraph.font
+    if font.size: paragraph.font.size = font.size
+    if font.bold: paragraph.font.bold = font.bold
+    if font.color and font.color.rgb: paragraph.font.color.rgb = font.color.rgb
 
 def convert_bullets(text):
     lines = text.split('\n')
@@ -69,6 +72,17 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     prs = load_template(style)
     remove_default_slides(prs)
 
+    try:
+        ref_slide = prs.slides.add_slide(prs.slide_layouts[0])
+        ref_title, ref_content = None, None
+        for shape in ref_slide.shapes:
+            if shape.is_placeholder and shape.placeholder_format.idx == 0:
+                ref_title = shape.text_frame.paragraphs[0]
+            elif shape.is_placeholder and shape.placeholder_format.idx == 1:
+                ref_content = shape.text_frame.paragraphs[0]
+    except Exception as e:
+        ref_title, ref_content = None, None
+    
     for slide_info in slides_data:
         layout = slide_info.get("layout", "solo testo").lower()
         layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
@@ -82,6 +96,7 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             tf.clear()
             p = tf.paragraphs[0]
             p.text = title_text
+            apply_font_from_template(p, ref_title)
 
         content_text = slide_info.get("content", "")
         if content_text and "text" in layout_spec:
@@ -90,12 +105,12 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             tf = content_box.text_frame
             tf.clear()
             tf.word_wrap = True
-
             for type_, txt in convert_bullets(content_text):
                 para = tf.add_paragraph() if tf.text else tf.paragraphs[0]
                 para.text = txt
                 if type_ == 'li':
                     para.level = 0
+                apply_font_from_template(para, ref_content)
 
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
