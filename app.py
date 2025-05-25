@@ -47,7 +47,8 @@ def _rgb(hex_color):
     if not hex_color or not isinstance(hex_color, str) or len(hex_color) < 6:
         return RGBColor(0, 0, 0)
     hex_color = hex_color.lstrip("#")
-    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
+
 
 def remove_default_slides(prs):
     while len(prs.slides) > 0:
