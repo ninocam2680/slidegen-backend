@@ -13,6 +13,24 @@ CORS(app, origins=["https://areaprompt.com"])
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
 TEMPLATE_DIR = "templates"
 
+# Layout definitions in inches
+LAYOUTS = {
+    "solo testo": {
+        "text": (0.7, 1.0, 8.0, 4.5)
+    },
+    "immagine a sinistra": {
+        "image": (0.5, 1.5, 3.0, 3.5),
+        "text": (3.7, 1.5, 5.5, 3.5)
+    },
+    "immagine a destra": {
+        "image": (6.5, 1.5, 3.0, 3.5),
+        "text": (0.7, 1.5, 5.5, 3.5)
+    },
+    "testo centrato": {
+        "text": (1.5, 2.0, 7.0, 2.5)
+    }
+}
+
 def load_template(style):
     filename = f"{style.lower()}.pptx"
     path = os.path.join(TEMPLATE_DIR, filename)
@@ -49,9 +67,14 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             p.font.bold = True
             p.font.color.rgb = _rgb(fonts.get("title", {}).get("color"))
 
-        content_text = slide_info.get("content", "")
-        if content_text:
-            content_box = slide.shapes.add_textbox(Inches(0.7), Inches(1.5), Inches(5.5), Inches(4))
+        layout = slide_info.get("layout", "solo testo").lower()
+        layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
+
+        # Text box
+        if "text" in layout_spec:
+            left, top, width, height = layout_spec["text"]
+            content_text = slide_info.get("content", "")
+            content_box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
             tf = content_box.text_frame
             tf.word_wrap = True
             p = tf.add_paragraph()
@@ -59,22 +82,14 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             p.font.size = Pt(fonts.get("content", {}).get("size", 20))
             p.font.color.rgb = _rgb(fonts.get("content", {}).get("color"))
 
+        # Image box
         image_url = slide_info.get("image_url")
-        layout = slide_info.get("layout", "").lower()
-
-        if image_url and "solo testo" not in layout:
+        if image_url and "image" in layout_spec:
             try:
                 img_data = requests.get(image_url, timeout=8).content
                 image_stream = BytesIO(img_data)
-
-                if "sinistra" in layout:
-                    left, top = Inches(6.5), Inches(1.5)
-                elif "destra" in layout:
-                    left, top = Inches(0.5), Inches(1.5)
-                else:
-                    left, top = Inches(2), Inches(3.5)
-
-                slide.shapes.add_picture(image_stream, left, top, width=Inches(3))
+                left, top, width, height = layout_spec["image"]
+                slide.shapes.add_picture(image_stream, Inches(left), Inches(top), width=Inches(width), height=Inches(height))
             except Exception as e:
                 print(f"Errore immagine: {e}")
 
@@ -112,4 +127,3 @@ def generate_pptx():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
