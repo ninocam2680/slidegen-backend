@@ -4,31 +4,40 @@ from pptx.util import Inches, Pt
 from io import BytesIO
 from flask_cors import CORS
 import requests
+import os
 
 app = Flask(__name__)
 CORS(app, origins=["https://areaprompt.com"])
 
-# 🔐 Chiave segreta condivisa con WordPress
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
+TEMPLATE_DIR = "templates"
 
-# 📦 Genera presentazione dinamicamente
-def create_presentation(slides_data, title=None, style=None):
-    prs = Presentation()
+
+def load_template(style):
+    try:
+        filename = f"{style.lower()}.pptx"
+        path = os.path.join(TEMPLATE_DIR, filename)
+        return Presentation(path)
+    except Exception:
+        return Presentation()  # fallback vuoto
+
+
+def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
+    prs = load_template(style)
 
     for slide_info in slides_data:
-        slide = prs.slides.add_slide(prs.slide_layouts[6])  # layout vuoto
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
 
-        # ➤ Titolo
         title_text = slide_info.get("title", "")
         if title_text:
             title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8), Inches(1))
             tf = title_box.text_frame
             p = tf.add_paragraph() if not tf.text else tf.paragraphs[0]
             p.text = title_text
-            p.font.size = Pt(32)
+            p.font.size = Pt(fonts.get("title", {}).get("size", 32))
             p.font.bold = True
+            p.font.color.rgb = _rgb(fonts.get("title", {}).get("color"))
 
-        # ➤ Contenuto
         content_text = slide_info.get("content", "")
         if content_text:
             content_box = slide.shapes.add_textbox(Inches(0.7), Inches(1.5), Inches(5.5), Inches(4))
@@ -36,9 +45,9 @@ def create_presentation(slides_data, title=None, style=None):
             tf.word_wrap = True
             p = tf.add_paragraph()
             p.text = content_text
-            p.font.size = Pt(20)
+            p.font.size = Pt(fonts.get("content", {}).get("size", 20))
+            p.font.color.rgb = _rgb(fonts.get("content", {}).get("color"))
 
-        # ➤ Immagine (se presente)
         image_url = slide_info.get("image_url")
         layout = slide_info.get("layout", "").lower()
 
@@ -47,7 +56,6 @@ def create_presentation(slides_data, title=None, style=None):
                 img_data = requests.get(image_url, timeout=8).content
                 image_stream = BytesIO(img_data)
 
-                # posizione immagine a seconda del layout
                 if "sinistra" in layout:
                     left, top = Inches(6.5), Inches(1.5)
                 elif "destra" in layout:
@@ -62,7 +70,13 @@ def create_presentation(slides_data, title=None, style=None):
     return prs
 
 
-# 🌐 Endpoint API
+def _rgb(hex_color):
+    from pptx.dml.color import RGBColor
+    if not hex_color: return RGBColor(0, 0, 0)
+    hex_color = hex_color.lstrip("#")
+    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
+
+
 @app.route("/generate", methods=["POST"])
 def generate_pptx():
     data = request.get_json()
@@ -74,7 +88,10 @@ def generate_pptx():
         prs = create_presentation(
             slides_data=data["slides"],
             title=data.get("title"),
-            style=data.get("style")
+            style=data.get("style"),
+            format=data.get("format"),
+            dimensions=data.get("dimensions"),
+            fonts=data.get("fonts") or {}
         )
 
         pptx_io = BytesIO()
@@ -85,7 +102,7 @@ def generate_pptx():
             pptx_io,
             mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             as_attachment=True,
-            download_name="presentazione.pptx"
+            download_name=f"presentazione_{data.get('style','default')}.pptx"
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
