@@ -1,6 +1,7 @@
 from flask import Flask, request, send_file, jsonify
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
 from io import BytesIO
 from flask_cors import CORS
 import requests
@@ -12,21 +13,30 @@ CORS(app, origins=["https://areaprompt.com"])
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
 TEMPLATE_DIR = "templates"
 
-
 def load_template(style):
-    try:
-        filename = f"{style.lower()}.pptx"
-        path = os.path.join(TEMPLATE_DIR, filename)
-        return Presentation(path)
-    except Exception:
-        return Presentation()  # fallback vuoto
+    filename = f"{style.lower()}.pptx"
+    path = os.path.join(TEMPLATE_DIR, filename)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Template non trovato: {filename}")
+    return Presentation(path)
 
+def _rgb(hex_color):
+    if not hex_color or not isinstance(hex_color, str) or len(hex_color) < 6:
+        return RGBColor(0, 0, 0)
+    hex_color = hex_color.lstrip("#")
+    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
 
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     prs = load_template(style)
 
     for slide_info in slides_data:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        # Rimuovi i placeholder del layout template
+        for shape in slide.shapes:
+            if shape.is_placeholder:
+                sp = shape
+                sp.element.getparent().remove(sp.element)
 
         title_text = slide_info.get("title", "")
         if title_text:
@@ -69,14 +79,6 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
 
     return prs
 
-
-def _rgb(hex_color):
-    from pptx.dml.color import RGBColor
-    if not hex_color: return RGBColor(0, 0, 0)
-    hex_color = hex_color.lstrip("#")
-    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
-
-
 @app.route("/generate", methods=["POST"])
 def generate_pptx():
     data = request.get_json()
@@ -107,6 +109,6 @@ def generate_pptx():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 if __name__ == "__main__":
     app.run(debug=True)
+
