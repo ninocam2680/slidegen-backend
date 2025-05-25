@@ -87,6 +87,11 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
 
         # Use blank layout
         slide = prs.slides.add_slide(prs.slide_layouts[6])
+# Rimuove eventuali placeholder predefiniti (titolo, contenuto, immagine, ecc.)
+for shape in list(slide.shapes):
+    if shape.is_placeholder:
+        shape.element.getparent().remove(shape.element)
+
 
         # Add Title
         title_text = slide_info.get("title", "")
