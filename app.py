@@ -50,7 +50,7 @@ def remove_default_slides(prs):
         del prs.slides._sldIdLst[0]
 
 def apply_font_from_template(paragraph, ref_paragraph):
-    if not ref_paragraph or not ref_paragraph.font:
+    if not ref_paragraph:
         return
     font = ref_paragraph.font
     if font.size: paragraph.font.size = font.size
@@ -72,39 +72,46 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     prs = load_template(style)
     remove_default_slides(prs)
 
+    # Preleva font dal layout 0 se disponibile
+    ref_title, ref_content = None, None
     try:
         ref_slide = prs.slides.add_slide(prs.slide_layouts[0])
-        ref_title, ref_content = None, None
         for shape in ref_slide.shapes:
-            if shape.is_placeholder and shape.placeholder_format.idx == 0:
-                ref_title = shape.text_frame.paragraphs[0]
-            elif shape.is_placeholder and shape.placeholder_format.idx == 1:
-                ref_content = shape.text_frame.paragraphs[0]
+            if shape.is_placeholder:
+                idx = shape.placeholder_format.idx
+                if idx == 0 and shape.has_text_frame:
+                    ref_title = shape.text_frame.paragraphs[0]
+                elif idx == 1 and shape.has_text_frame:
+                    ref_content = shape.text_frame.paragraphs[0]
+        prs.slides.remove(ref_slide)
     except Exception as e:
-        ref_title, ref_content = None, None
-    
+        print(f"[!] Font fallback: {e}")
+
     for slide_info in slides_data:
         layout = slide_info.get("layout", "solo testo").lower()
         layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
 
         slide = prs.slides.add_slide(prs.slide_layouts[6])
 
+        # Title
         title_text = slide_info.get("title", "")
         if title_text:
-            title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8.0), Inches(1.0))
-            tf = title_box.text_frame
+            box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8.0), Inches(1.0))
+            tf = box.text_frame
             tf.clear()
             p = tf.paragraphs[0]
             p.text = title_text
             apply_font_from_template(p, ref_title)
 
+        # Content
         content_text = slide_info.get("content", "")
         if content_text and "text" in layout_spec:
-            left, top, width, height = layout_spec["text"]
-            content_box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
-            tf = content_box.text_frame
+            x, y, w, h = layout_spec["text"]
+            box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+            tf = box.text_frame
             tf.clear()
             tf.word_wrap = True
+
             for type_, txt in convert_bullets(content_text):
                 para = tf.add_paragraph() if tf.text else tf.paragraphs[0]
                 para.text = txt
@@ -112,13 +119,14 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
                     para.level = 0
                 apply_font_from_template(para, ref_content)
 
+        # Image
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
             try:
                 img_data = requests.get(image_url, timeout=8).content
                 image_stream = BytesIO(img_data)
-                left, top, width, height = layout_spec["image"]
-                slide.shapes.add_picture(image_stream, Inches(left), Inches(top), width=Inches(width), height=Inches(height))
+                x, y, w, h = layout_spec["image"]
+                slide.shapes.add_picture(image_stream, Inches(x), Inches(y), width=Inches(w), height=Inches(h))
             except Exception as e:
                 print(f"Errore immagine: {e}")
 
