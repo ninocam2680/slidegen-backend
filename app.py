@@ -69,24 +69,11 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     prs = load_template(style)
     remove_default_slides(prs)
 
-    ref_slide = prs.slides.add_slide(prs.slide_layouts[0])
-    ref_title, ref_content = None, None
-    for shape in ref_slide.shapes:
-        if shape.is_placeholder and shape.placeholder_format.idx == 0:
-            ref_title = shape.text_frame.paragraphs[0]
-        elif shape.is_placeholder and shape.placeholder_format.idx == 1:
-            ref_content = shape.text_frame.paragraphs[0]
-    prs.slides.remove(ref_slide)
-
     for slide_info in slides_data:
         layout = slide_info.get("layout", "solo testo").lower()
         layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
 
         slide = prs.slides.add_slide(prs.slide_layouts[6])
-
-        for shape in list(slide.shapes):
-            if shape.is_placeholder:
-                shape.element.getparent().remove(shape.element)
 
         title_text = slide_info.get("title", "")
         if title_text:
@@ -95,8 +82,6 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             tf.clear()
             p = tf.paragraphs[0]
             p.text = title_text
-            if ref_title:
-                apply_font_from_template(p, ref_title)
 
         content_text = slide_info.get("content", "")
         if content_text and "text" in layout_spec:
@@ -111,8 +96,6 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
                 para.text = txt
                 if type_ == 'li':
                     para.level = 0
-                if ref_content:
-                    apply_font_from_template(para, ref_content)
 
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
