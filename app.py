@@ -1,6 +1,6 @@
 from flask import Flask, request, send_file, jsonify
 from pptx import Presentation
-from pptx.util import Inches, Pt
+from pptx.util import Inches
 from pptx.dml.color import RGBColor
 from io import BytesIO
 from flask_cors import CORS
@@ -13,21 +13,20 @@ CORS(app, origins=["https://areaprompt.com"])
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
 TEMPLATE_DIR = "templates"
 
-# Layout definitions in inches
 LAYOUTS = {
     "solo testo": {
-        "text": (0.7, 1.0, 8.0, 4.5)
+        "text": (1.0, 1.5, 8.0, 4.5)
     },
     "immagine a sinistra": {
-        "image": (0.5, 1.5, 3.0, 3.5),
-        "text": (3.7, 1.5, 5.5, 3.5)
+        "image": (0.7, 1.5, 3.2, 3.8),
+        "text": (4.1, 1.5, 5.2, 3.8)
     },
     "immagine a destra": {
-        "image": (6.5, 1.5, 3.0, 3.5),
-        "text": (0.7, 1.5, 5.5, 3.5)
+        "image": (6.3, 1.5, 3.2, 3.8),
+        "text": (0.7, 1.5, 5.2, 3.8)
     },
     "testo centrato": {
-        "text": (1.5, 2.0, 7.0, 2.5)
+        "text": (2.0, 2.0, 6.5, 3.0)
     }
 }
 
@@ -50,39 +49,71 @@ def remove_default_slides(prs):
         prs.part.drop_rel(rId)
         del prs.slides._sldIdLst[0]
 
+def apply_font_from_template(paragraph, ref_paragraph):
+    paragraph.font.size = ref_paragraph.font.size
+    paragraph.font.bold = ref_paragraph.font.bold
+    paragraph.font.color.rgb = ref_paragraph.font.color.rgb
+
+def convert_bullets(text):
+    lines = text.split('\n')
+    items = []
+    for line in lines:
+        line = line.strip()
+        if line.startswith('- '):
+            items.append(('li', line[2:].strip()))
+        else:
+            items.append(('p', line))
+    return items
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     prs = load_template(style)
     remove_default_slides(prs)
 
+    ref_slide = prs.slides.add_slide(prs.slide_layouts[0])
+    ref_title, ref_content = None, None
+    for shape in ref_slide.shapes:
+        if shape.is_placeholder and shape.placeholder_format.idx == 0:
+            ref_title = shape.text_frame.paragraphs[0]
+        elif shape.is_placeholder and shape.placeholder_format.idx == 1:
+            ref_content = shape.text_frame.paragraphs[0]
+    prs.slides.remove(ref_slide)
+
     for slide_info in slides_data:
-        slide = prs.slides.add_slide(prs.slide_layouts[6])
-
-        title_text = slide_info.get("title", "")
-        if title_text:
-            title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8), Inches(1))
-            tf = title_box.text_frame
-            p = tf.add_paragraph() if not tf.text else tf.paragraphs[0]
-            p.text = title_text
-            p.font.size = Pt(fonts.get("title", {}).get("size", 32))
-            p.font.bold = True
-            p.font.color.rgb = _rgb(fonts.get("title", {}).get("color"))
-
         layout = slide_info.get("layout", "solo testo").lower()
         layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
 
-        # Text box
-        if "text" in layout_spec:
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        for shape in list(slide.shapes):
+            if shape.is_placeholder:
+                shape.element.getparent().remove(shape.element)
+
+        title_text = slide_info.get("title", "")
+        if title_text:
+            title_box = slide.shapes.add_textbox(Inches(0.7), Inches(0.5), Inches(8.0), Inches(1.0))
+            tf = title_box.text_frame
+            tf.clear()
+            p = tf.paragraphs[0]
+            p.text = title_text
+            if ref_title:
+                apply_font_from_template(p, ref_title)
+
+        content_text = slide_info.get("content", "")
+        if content_text and "text" in layout_spec:
             left, top, width, height = layout_spec["text"]
-            content_text = slide_info.get("content", "")
             content_box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
             tf = content_box.text_frame
+            tf.clear()
             tf.word_wrap = True
-            p = tf.add_paragraph()
-            p.text = content_text
-            p.font.size = Pt(fonts.get("content", {}).get("size", 20))
-            p.font.color.rgb = _rgb(fonts.get("content", {}).get("color"))
 
-        # Image box
+            for type_, txt in convert_bullets(content_text):
+                para = tf.add_paragraph() if tf.text else tf.paragraphs[0]
+                para.text = txt
+                if type_ == 'li':
+                    para.level = 0
+                if ref_content:
+                    apply_font_from_template(para, ref_content)
+
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
             try:
