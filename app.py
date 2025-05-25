@@ -26,17 +26,18 @@ def _rgb(hex_color):
     hex_color = hex_color.lstrip("#")
     return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
 
+def remove_default_slides(prs):
+    while len(prs.slides) > 0:
+        rId = prs.slides._sldIdLst[0].rId
+        prs.part.drop_rel(rId)
+        del prs.slides._sldIdLst[0]
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     prs = load_template(style)
+    remove_default_slides(prs)
 
     for slide_info in slides_data:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
-
-        # Rimuovi i placeholder del layout template
-        for shape in slide.shapes:
-            if shape.is_placeholder:
-                sp = shape
-                sp.element.getparent().remove(sp.element)
 
         title_text = slide_info.get("title", "")
         if title_text:
