@@ -13,9 +13,8 @@ CORS(app, origins=["https://areaprompt.com"])
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
 TEMPLATE_DIR = "templates"
 
-# Dimensioni fisse per il testo
-TITLE_FONT_SIZE = Pt(24)   # 24pt per i titoli
-CONTENT_FONT_SIZE = Pt(18) # 18pt per i paragrafi
+TITLE_FONT_SIZE = Pt(24)
+CONTENT_FONT_SIZE = Pt(18)
 
 LAYOUTS = {
     "solo testo": {
@@ -49,7 +48,6 @@ def _rgb(hex_color):
     hex_color = hex_color.lstrip("#")
     return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
 
-
 def remove_default_slides(prs):
     while len(prs.slides) > 0:
         rId = prs.slides._sldIdLst[0].rId
@@ -57,7 +55,6 @@ def remove_default_slides(prs):
         del prs.slides._sldIdLst[0]
 
 def convert_bullets(text):
-    """Convert text with bullets to structured content"""
     if not text:
         return []
     lines = text.split('\n')
@@ -75,25 +72,21 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
         prs = load_template(style)
     except FileNotFoundError:
         prs = Presentation()
-        # Set default slide size for 16:9
         prs.slide_width = Inches(10)
         prs.slide_height = Inches(5.625)
-    
+
     remove_default_slides(prs)
 
     for slide_info in slides_data:
         layout = slide_info.get("layout", "solo testo").lower()
         layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
 
-        # Use blank layout
         slide = prs.slides.add_slide(prs.slide_layouts[6])
-# Rimuove eventuali placeholder predefiniti (titolo, contenuto, immagine, ecc.)
-for shape in list(slide.shapes):
-    if shape.is_placeholder:
-        shape.element.getparent().remove(shape.element)
 
+        for shape in list(slide.shapes):
+            if shape.is_placeholder:
+                shape.element.getparent().remove(shape.element)
 
-        # Add Title
         title_text = slide_info.get("title", "")
         if title_text:
             x, y, w, h = layout_spec.get("title", (0.7, 0.4, 8.5, 1.0))
@@ -107,7 +100,6 @@ for shape in list(slide.shapes):
             if fonts and fonts.get("title"):
                 title_para.font.color.rgb = _rgb(fonts["title"].get("color"))
 
-        # Add Content
         content_text = slide_info.get("content", "")
         if content_text and "content" in layout_spec:
             x, y, w, h = layout_spec["content"]
@@ -125,7 +117,6 @@ for shape in list(slide.shapes):
                 if fonts and fonts.get("content"):
                     para.font.color.rgb = _rgb(fonts["content"].get("color"))
 
-        # Add Image
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
             try:
@@ -136,7 +127,6 @@ for shape in list(slide.shapes):
                 slide.shapes.add_picture(image_stream, Inches(x), Inches(y), Inches(w), Inches(h))
             except Exception as e:
                 print(f"Image error: {e}")
-                # Add placeholder
                 x, y, w, h = layout_spec["image"]
                 placeholder = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
                 placeholder.text_frame.text = "Image not available"
