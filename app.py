@@ -13,21 +13,26 @@ CORS(app, origins=["https://areaprompt.com"])
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
 TEMPLATE_DIR = "templates"
 
-# Layout positions in inches for strict alignment
+# Dimensioni fisse per il testo
+TITLE_FONT_SIZE = Pt(24)   # 24pt per i titoli
+CONTENT_FONT_SIZE = Pt(18) # 18pt per i paragrafi
+
 LAYOUTS = {
     "solo testo": {
-        "text": (1.0, 1.5, 8.0, 4.5)
+        "title": (0.7, 0.4, 8.5, 1.0),
+        "content": (1.0, 1.6, 8.0, 4.5)
     },
     "immagine a sinistra": {
-        "image": (0.7, 1.5, 3.2, 3.8),
-        "text": (4.1, 1.5, 5.2, 3.8)
+        "image": (0.5, 1.5, 3.5, 4.0),
+        "content": (4.5, 1.5, 4.5, 4.0)
     },
     "immagine a destra": {
-        "image": (6.3, 1.5, 3.2, 3.8),
-        "text": (0.7, 1.5, 5.2, 3.8)
+        "image": (6.0, 1.5, 3.5, 4.0),
+        "content": (0.5, 1.5, 4.5, 4.0)
     },
     "testo centrato": {
-        "text": (2.0, 2.0, 6.5, 3.0)
+        "title": (0.7, 0.4, 8.5, 1.0),
+        "content": (2.0, 2.0, 6.5, 3.0)
     }
 }
 
@@ -42,7 +47,7 @@ def _rgb(hex_color):
     if not hex_color or not isinstance(hex_color, str) or len(hex_color) < 6:
         return RGBColor(0, 0, 0)
     hex_color = hex_color.lstrip("#")
-    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
+    return RGBColor(int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
 
 def remove_default_slides(prs):
     while len(prs.slides) > 0:
@@ -50,51 +55,86 @@ def remove_default_slides(prs):
         prs.part.drop_rel(rId)
         del prs.slides._sldIdLst[0]
 
+def convert_bullets(text):
+    """Convert text with bullets to structured content"""
+    if not text:
+        return []
+    lines = text.split('\n')
+    items = []
+    for line in lines:
+        line = line.strip()
+        if line.startswith('- '):
+            items.append(('li', line[2:].strip()))
+        elif line:
+            items.append(('p', line))
+    return items
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
-    prs = load_template(style)
+    try:
+        prs = load_template(style)
+    except FileNotFoundError:
+        prs = Presentation()
+        # Set default slide size for 16:9
+        prs.slide_width = Inches(10)
+        prs.slide_height = Inches(5.625)
+    
     remove_default_slides(prs)
 
     for slide_info in slides_data:
         layout = slide_info.get("layout", "solo testo").lower()
         layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
 
+        # Use blank layout
         slide = prs.slides.add_slide(prs.slide_layouts[6])
 
-        # Title
+        # Add Title
         title_text = slide_info.get("title", "")
         if title_text:
-            box = slide.shapes.add_textbox(Inches(0.7), Inches(0.4), Inches(8.5), Inches(1))
-            tf = box.text_frame
-            tf.clear()
-            p = tf.paragraphs[0]
-            p.text = title_text
-            p.font.size = Pt(fonts.get("title", {}).get("size", 36))
-            p.font.bold = True
-            p.font.color.rgb = _rgb(fonts.get("title", {}).get("color"))
+            x, y, w, h = layout_spec.get("title", (0.7, 0.4, 8.5, 1.0))
+            title_box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+            title_frame = title_box.text_frame
+            title_frame.clear()
+            title_para = title_frame.paragraphs[0]
+            title_para.text = title_text
+            title_para.font.size = TITLE_FONT_SIZE
+            title_para.font.bold = True
+            if fonts and fonts.get("title"):
+                title_para.font.color.rgb = _rgb(fonts["title"].get("color"))
 
-        # Content
+        # Add Content
         content_text = slide_info.get("content", "")
-        if content_text and "text" in layout_spec:
-            x, y, w, h = layout_spec["text"]
-            box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-            tf = box.text_frame
-            tf.clear()
-            tf.word_wrap = True
-            p = tf.paragraphs[0]
-            p.text = content_text
-            p.font.size = Pt(fonts.get("content", {}).get("size", 22))
-            p.font.color.rgb = _rgb(fonts.get("content", {}).get("color"))
+        if content_text and "content" in layout_spec:
+            x, y, w, h = layout_spec["content"]
+            content_box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+            content_frame = content_box.text_frame
+            content_frame.clear()
+            content_frame.word_wrap = True
 
-        # Image
+            for type_, txt in convert_bullets(content_text):
+                para = content_frame.add_paragraph()
+                para.text = txt
+                para.font.size = CONTENT_FONT_SIZE
+                if type_ == 'li':
+                    para.level = 0
+                if fonts and fonts.get("content"):
+                    para.font.color.rgb = _rgb(fonts["content"].get("color"))
+
+        # Add Image
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
             try:
-                img_data = requests.get(image_url, timeout=10).content
-                image_stream = BytesIO(img_data)
+                response = requests.get(image_url, timeout=10)
+                response.raise_for_status()
+                image_stream = BytesIO(response.content)
                 x, y, w, h = layout_spec["image"]
-                slide.shapes.add_picture(image_stream, Inches(x), Inches(y), width=Inches(w), height=Inches(h))
+                slide.shapes.add_picture(image_stream, Inches(x), Inches(y), Inches(w), Inches(h))
             except Exception as e:
-                print(f"Errore immagine: {e}")
+                print(f"Image error: {e}")
+                # Add placeholder
+                x, y, w, h = layout_spec["image"]
+                placeholder = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+                placeholder.text_frame.text = "Image not available"
+                placeholder.text_frame.paragraphs[0].font.size = Pt(12)
 
     return prs
 
@@ -129,4 +169,3 @@ def generate_pptx():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
