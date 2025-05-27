@@ -13,28 +13,6 @@ CORS(app, origins=["https://areaprompt.com"])
 SHARED_SECRET = "slidegen-2024-key-Zx4r9Lp1"
 TEMPLATE_DIR = "templates"
 
-TITLE_FONT_SIZE = Pt(24)
-CONTENT_FONT_SIZE = Pt(18)
-
-LAYOUTS = {
-    "solo testo": {
-        "title": (0.7, 0.4, 8.5, 1.0),
-        "content": (1.0, 1.6, 8.0, 4.5)
-    },
-    "immagine a sinistra": {
-        "image": (0.5, 1.5, 3.5, 4.0),
-        "content": (4.5, 1.5, 4.5, 4.0)
-    },
-    "immagine a destra": {
-        "image": (6.0, 1.5, 3.5, 4.0),
-        "content": (0.5, 1.5, 4.5, 4.0)
-    },
-    "testo centrato": {
-        "title": (0.7, 0.4, 8.5, 1.0),
-        "content": (2.0, 2.0, 6.5, 3.0)
-    }
-}
-
 def load_template(style):
     filename = f"{style.lower()}.pptx"
     path = os.path.join(TEMPLATE_DIR, filename)
@@ -67,6 +45,13 @@ def convert_bullets(text):
             items.append(('p', line))
     return items
 
+def get_layout_by_name(prs, name, fallback_index=0):
+    for layout in prs.slide_layouts:
+        if layout.name.lower().strip() == name.lower().strip():
+            return layout
+    print(f"[AVVISO] Layout '{name}' non trovato. Uso fallback slide_layouts[{fallback_index}].")
+    return prs.slide_layouts[fallback_index]
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     try:
         prs = load_template(style)
@@ -78,58 +63,44 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     remove_default_slides(prs)
 
     for slide_info in slides_data:
-        layout = slide_info.get("layout", "solo testo").lower()
-        layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
+        layout_name = "Titolo e contenuto"
+        slide_layout = get_layout_by_name(prs, layout_name)
+        slide = prs.slides.add_slide(slide_layout)
 
-        slide = prs.slides.add_slide(prs.slide_layouts[6])
-
-        for shape in list(slide.shapes):
-            if shape.is_placeholder:
-                shape.element.getparent().remove(shape.element)
-
+        # Inserisci titolo nel placeholder 0
         title_text = slide_info.get("title", "")
-        if title_text:
-            x, y, w, h = layout_spec.get("title", (0.7, 0.4, 8.5, 1.0))
-            title_box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-            title_frame = title_box.text_frame
-            title_frame.clear()
-            title_para = title_frame.paragraphs[0]
-            title_para.text = title_text
-            title_para.font.size = TITLE_FONT_SIZE
-            title_para.font.bold = True
-         
-            # Non impostare manualmente il colore del font per i titoli
+        try:
+            placeholder_title = slide.placeholders[0]
+            placeholder_title.text = title_text
+        except (IndexError, AttributeError):
+            pass
 
+        # Inserisci contenuto nel placeholder 1
         content_text = slide_info.get("content", "")
-        if content_text and "content" in layout_spec:
-            x, y, w, h = layout_spec["content"]
-            content_box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-            content_frame = content_box.text_frame
+        try:
+            placeholder_content = slide.placeholders[1]
+            content_frame = placeholder_content.text_frame
             content_frame.clear()
-            content_frame.word_wrap = True
-
             for type_, txt in convert_bullets(content_text):
                 para = content_frame.add_paragraph()
                 para.text = txt
-                para.font.size = CONTENT_FONT_SIZE
                 if type_ == 'li':
                     para.level = 0
-               # Non impostare manualmente il colore del font per i contenuti
+        except (IndexError, AttributeError):
+            pass
 
+        # Inserisci immagine opzionale
         image_url = slide_info.get("image_url")
-        if image_url and "image" in layout_spec:
+        if image_url:
             try:
                 response = requests.get(image_url, timeout=10)
                 response.raise_for_status()
                 image_stream = BytesIO(response.content)
-                x, y, w, h = layout_spec["image"]
-                slide.shapes.add_picture(image_stream, Inches(x), Inches(y), Inches(w), Inches(h))
+                slide.shapes.add_picture(image_stream, Inches(6), Inches(1.5), Inches(3.5), Inches(4.0))
             except Exception as e:
                 print(f"Image error: {e}")
-                x, y, w, h = layout_spec["image"]
-                placeholder = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+                placeholder = slide.shapes.add_textbox(Inches(6), Inches(1.5), Inches(3.5), Inches(1))
                 placeholder.text_frame.text = "Image not available"
-                placeholder.text_frame.paragraphs[0].font.size = Pt(12)
 
     return prs
 
@@ -160,7 +131,10 @@ def generate_pptx():
             download_name=f"presentazione_{data.get('style','default')}.pptx"
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
+
