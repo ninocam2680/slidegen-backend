@@ -98,7 +98,7 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             title_para.font.size = TITLE_FONT_SIZE
             title_para.font.bold = True
             if fonts and fonts.get("title"):
-                title_para.font.color.rgb = _rgb(fonts["title"].get("color"))
+            # Non impostare manualmente il colore del font per i titoli
 
         content_text = slide_info.get("content", "")
         if content_text and "content" in layout_spec:
@@ -114,8 +114,7 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
                 para.font.size = CONTENT_FONT_SIZE
                 if type_ == 'li':
                     para.level = 0
-                if fonts and fonts.get("content"):
-                    para.font.color.rgb = _rgb(fonts["content"].get("color"))
+               # Non impostare manualmente il colore del font per i contenuti
 
         image_url = slide_info.get("image_url")
         if image_url and "image" in layout_spec:
