@@ -67,12 +67,6 @@ def convert_bullets(text):
             items.append(('p', line))
     return items
 
-def get_layout_by_name(prs, name):
-    for layout in prs.slide_layouts:
-        if layout.name.lower().strip() == name.lower().strip():
-            return layout
-    raise ValueError(f"Layout '{name}' non trovato nel template."
-
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     try:
         prs = load_template(style)
@@ -84,47 +78,60 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     remove_default_slides(prs)
 
     for slide_info in slides_data:
-        # Usa un layout con grafica (es. "Titolo e contenuto")
-        layout = get_layout_by_name(prs, "Titolo e contenuto")  # Puoi mappare per layout diversi
-        slide = prs.slides.add_slide(layout)
+        layout = slide_info.get("layout", "solo testo").lower()
+        layout_spec = LAYOUTS.get(layout, LAYOUTS["solo testo"])
 
-        # Inserisci titolo nel placeholder 0
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        for shape in list(slide.shapes):
+            if shape.is_placeholder:
+                shape.element.getparent().remove(shape.element)
+
         title_text = slide_info.get("title", "")
-        try:
-            placeholder_title = slide.placeholders[0]
-            placeholder_title.text = title_text
-        except (IndexError, AttributeError):
-            pass
+        if title_text:
+            x, y, w, h = layout_spec.get("title", (0.7, 0.4, 8.5, 1.0))
+            title_box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+            title_frame = title_box.text_frame
+            title_frame.clear()
+            title_para = title_frame.paragraphs[0]
+            title_para.text = title_text
+            title_para.font.size = TITLE_FONT_SIZE
+            title_para.font.bold = True
+         
+            # Non impostare manualmente il colore del font per i titoli
 
-        # Inserisci contenuto nel placeholder 1
         content_text = slide_info.get("content", "")
-        try:
-            placeholder_content = slide.placeholders[1]
-            content_frame = placeholder_content.text_frame
+        if content_text and "content" in layout_spec:
+            x, y, w, h = layout_spec["content"]
+            content_box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+            content_frame = content_box.text_frame
             content_frame.clear()
+            content_frame.word_wrap = True
+
             for type_, txt in convert_bullets(content_text):
                 para = content_frame.add_paragraph()
                 para.text = txt
+                para.font.size = CONTENT_FONT_SIZE
                 if type_ == 'li':
                     para.level = 0
-        except (IndexError, AttributeError):
-            pass
+               # Non impostare manualmente il colore del font per i contenuti
 
-        # Inserisci immagine opzionale
         image_url = slide_info.get("image_url")
-        if image_url:
+        if image_url and "image" in layout_spec:
             try:
                 response = requests.get(image_url, timeout=10)
                 response.raise_for_status()
                 image_stream = BytesIO(response.content)
-                slide.shapes.add_picture(image_stream, Inches(6), Inches(1.5), Inches(3.5), Inches(4.0))
+                x, y, w, h = layout_spec["image"]
+                slide.shapes.add_picture(image_stream, Inches(x), Inches(y), Inches(w), Inches(h))
             except Exception as e:
                 print(f"Image error: {e}")
-                placeholder = slide.shapes.add_textbox(Inches(6), Inches(1.5), Inches(3.5), Inches(1))
+                x, y, w, h = layout_spec["image"]
+                placeholder = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
                 placeholder.text_frame.text = "Image not available"
+                placeholder.text_frame.paragraphs[0].font.size = Pt(12)
 
     return prs
-
 
 @app.route("/generate", methods=["POST"])
 def generate_pptx():
