@@ -97,7 +97,7 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
             title_para.text = title_text
             title_para.font.size = TITLE_FONT_SIZE
             title_para.font.bold = True
-            if fonts and fonts.get("title"):
+         
             # Non impostare manualmente il colore del font per i titoli
 
         content_text = slide_info.get("content", "")
