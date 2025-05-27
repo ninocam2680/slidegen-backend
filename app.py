@@ -67,6 +67,12 @@ def convert_bullets(text):
             items.append(('p', line))
     return items
 
+def get_layout_by_name(prs, name):
+    for layout in prs.slide_layouts:
+        if layout.name.lower().strip() == name.lower().strip():
+            return layout
+    raise ValueError(f"Layout '{name}' non trovato nel template."
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     try:
         prs = load_template(style)
