@@ -1,7 +1,8 @@
 from flask import Flask, request, send_file, jsonify
 from pptx import Presentation
-from pptx.util import Inches, Pt
+from pptx.util import Inches
 from pptx.dml.color import RGBColor
+from pptx.enum.shapes import PP_PLACEHOLDER
 from io import BytesIO
 from flask_cors import CORS
 import requests
@@ -52,6 +53,12 @@ def get_layout_by_name(prs, name, fallback_index=0):
     print(f"[AVVISO] Layout '{name}' non trovato. Uso fallback slide_layouts[{fallback_index}].")
     return prs.slide_layouts[fallback_index]
 
+def get_placeholder_by_type(slide, placeholder_type):
+    for ph in slide.placeholders:
+        if ph.placeholder_format.type == placeholder_type:
+            return ph
+    return None
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     try:
         prs = load_template(style)
@@ -63,22 +70,20 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     remove_default_slides(prs)
 
     for slide_info in slides_data:
-        layout_name = "Titolo e contenuto"
+        layout_name = slide_info.get("layout_name", "Titolo e contenuto")
         slide_layout = get_layout_by_name(prs, layout_name)
         slide = prs.slides.add_slide(slide_layout)
 
-        # Inserisci titolo nel placeholder 0
+        # Inserisci titolo
         title_text = slide_info.get("title", "")
-        try:
-            placeholder_title = slide.placeholders[0]
+        placeholder_title = get_placeholder_by_type(slide, PP_PLACEHOLDER.TITLE)
+        if placeholder_title:
             placeholder_title.text = title_text
-        except (IndexError, AttributeError):
-            pass
 
-        # Inserisci contenuto nel placeholder 1
+        # Inserisci contenuto
         content_text = slide_info.get("content", "")
-        try:
-            placeholder_content = slide.placeholders[1]
+        placeholder_content = get_placeholder_by_type(slide, PP_PLACEHOLDER.BODY)
+        if placeholder_content:
             content_frame = placeholder_content.text_frame
             content_frame.clear()
             for type_, txt in convert_bullets(content_text):
@@ -86,8 +91,6 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
                 para.text = txt
                 if type_ == 'li':
                     para.level = 0
-        except (IndexError, AttributeError):
-            pass
 
         # Inserisci immagine opzionale
         image_url = slide_info.get("image_url")
@@ -96,11 +99,26 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
                 response = requests.get(image_url, timeout=10)
                 response.raise_for_status()
                 image_stream = BytesIO(response.content)
-                slide.shapes.add_picture(image_stream, Inches(6), Inches(1.5), Inches(3.5), Inches(4.0))
+
+                # Posizione immagine dinamica
+                layout_pos = {
+                    "Immagine destra + Testo sinistra": (Inches(6), Inches(1.5)),
+                    "Immagine sinistra + Testo destra": (Inches(0.5), Inches(1.5)),
+                    "Immagine centrata + Testo sotto": (Inches(3.5), Inches(1.0))
+                }
+                left, top = layout_pos.get(layout_name, (Inches(6), Inches(1.5)))
+
+                slide.shapes.add_picture(image_stream, left, top, Inches(3.5), Inches(4.0))
             except Exception as e:
                 print(f"Image error: {e}")
                 placeholder = slide.shapes.add_textbox(Inches(6), Inches(1.5), Inches(3.5), Inches(1))
                 placeholder.text_frame.text = "Image not available"
+
+        # Fallback se mancano tutti i placeholder
+        if not placeholder_title and not placeholder_content:
+            textbox = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(4))
+            tf = textbox.text_frame
+            tf.text = f"{title_text}\n\n{content_text}"
 
     return prs
 
@@ -136,4 +154,14 @@ def generate_pptx():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
+    # Debug: stampa i layout del primo template disponibile
+    try:
+        test_prs = load_template("default")
+        print("Layout disponibili:")
+        for i, layout in enumerate(test_prs.slide_layouts):
+            print(f"{i}: {layout.name}")
+    except:
+        pass
+
     app.run(debug=True)
+
