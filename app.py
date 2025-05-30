@@ -52,6 +52,14 @@ def get_layout_by_name(prs, name, fallback_index=0):
     print(f"[AVVISO] Layout '{name}' non trovato. Uso fallback slide_layouts[{fallback_index}].")
     return prs.slide_layouts[fallback_index]
 
+# Mappa per usare i nomi dei layout corrispondenti ai tuoi file template
+LAYOUT_NAME_MAP = {
+    "immagine a destra": "Immagine destra + Testo sinistra",
+    "immagine a sinistra": "Immagine sinistra + Testo destra",
+    "immagine centrata": "Immagine centrata + Testo sotto",
+    "solo testo": "solo testo"
+}
+
 def create_presentation(slides_data, title=None, style=None, format="16:9", dimensions=None, fonts=None):
     try:
         prs = load_template(style)
@@ -63,7 +71,8 @@ def create_presentation(slides_data, title=None, style=None, format="16:9", dime
     remove_default_slides(prs)
 
     for slide_info in slides_data:
-        layout_name = "Titolo e contenuto"
+        layout_key = slide_info.get("layout", "solo testo").lower()
+        layout_name = LAYOUT_NAME_MAP.get(layout_key, "solo testo")
         slide_layout = get_layout_by_name(prs, layout_name)
         slide = prs.slides.add_slide(slide_layout)
 
